@@ -1,0 +1,21 @@
+# Environment variables & secrets
+.env
+backend/.env
+
+# Python Cache & Virtual Environments
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Next.js / Frontend Build files
+.next/
+out/
+build/
+next-env.d.ts
+
+# OS specific files
+.DS_Store
+Thumbs.db
+~$*
