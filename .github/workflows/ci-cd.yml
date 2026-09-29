@@ -28,12 +28,12 @@ jobs:
 
       - name: Run Pytest Suite
         env:
+          PYTHONPATH: .
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          REDIS_URL: ${{ secrets.REDIS_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
         run: |
           cd backend && pytest -v
