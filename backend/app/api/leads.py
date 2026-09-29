@@ -6,7 +6,8 @@ from ..schemas.user import User
 from ..schemas.pagination import PaginatedResponse
 from ..schemas.common import ActionSuccessResponse
 # Rename the standalone service function import to prevent shadowing the route function name
-from ..services.lead import LeadService, delete_lead as delete_lead_service
+from ..services.lead import LeadService
+import app.services.lead as lead_service_module
 from ..services.auth import get_current_user
 from ..models.lead import LeadModel
 
@@ -170,7 +171,6 @@ async def assign_lead(
         data={"lead_id": str(updated_lead.id), "assigned_to": str(user_id)}
     )
 
-
 @router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_lead(
     lead_id: UUID,
@@ -181,12 +181,12 @@ async def delete_lead(
     """
     role_str = get_user_role_str(current_user)
     
-    # Super Admin & Org Admin can delete any lead
+    # Super Admin & Org Admin can delete any lead directly (relies on service/mock)
     if role_str in ["super_admin", "org_admin"]:
-        await delete_lead_service(lead_id, current_user)
+        await lead_service_module.delete_lead(lead_id, current_user)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     
-    # Clinic Manager / Reception can only delete leads from their assigned clinics
+    # Clinic Manager / Reception need lead existence and clinic validation
     if role_str in ["clinic_manager", "reception"]:
         lead = await LeadModel.get_by_id(lead_id)
         if not lead:
@@ -199,7 +199,7 @@ async def delete_lead(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Can only delete leads from your assigned clinics"
             )
-        await delete_lead_service(lead_id, current_user)
+        await lead_service_module.delete_lead(lead_id, current_user)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     
     # Agent and other roles cannot delete leads
