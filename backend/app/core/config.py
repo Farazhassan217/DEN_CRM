@@ -34,8 +34,8 @@ class Settings(BaseSettings):
     
     # AI Configuration
     GEMINI_API_KEY: str
-    AI_PRIMARY_MODEL: str = "gemini-3.5-flash"
-    AI_FALLBACK_MODEL: str = "gemini-2.5-flash"
+    AI_PRIMARY_MODEL: str = "gemini-3.8-flash"
+    AI_FALLBACK_MODEL: str = "gemini-3.5-flash-lite"
     AI_MAX_RETRIES: int = 3
     AI_TIMEOUT_SECONDS: int = 30
     

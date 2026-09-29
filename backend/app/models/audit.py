@@ -74,16 +74,29 @@ class AuditModel:
         return [AuditLog(**log) for log in response.data]
     
     @staticmethod
-    async def get_by_organization(org_id: str, limit: int = 100) -> List[AuditLog]:
-        """Get audit logs for an organization"""
+    async def get_by_organization(
+        org_id: str, 
+        limit: int = 100, 
+        clinic_id: Optional[str] = None
+    ) -> List[AuditLog]:
+        """Get audit logs for an organization with optional clinic filtering"""
         supabase = get_admin_client()
         
-        response = supabase.table(AuditModel.TABLE_NAME)\
-            .select("*")\
-            .eq("organization_id", org_id)\
-            .order("created_at", desc=True)\
-            .limit(limit)\
+        query = (
+            supabase.table(AuditModel.TABLE_NAME)
+            .select("*")
+            .eq("organization_id", org_id)
+        )
+        
+        # Agar clinic_id provide kiya gaya hai toh query ko refine kar dein
+        if clinic_id:
+            query = query.eq("clinic_id", clinic_id)
+            
+        response = (
+            query.order("created_at", desc=True)
+            .limit(limit)
             .execute()
+        )
         
         return [AuditLog(**log) for log in response.data]
     

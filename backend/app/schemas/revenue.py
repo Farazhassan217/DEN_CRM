@@ -52,6 +52,13 @@ class RevenueUpdate(BaseModel):
     notes: Optional[str] = None
     invoice_number: Optional[str] = None
     appointment_id: Optional[str] = None
+    paid_amount: Optional[float] = None         # <-- Yeh field lazmi add karein
+    outstanding_amount: Optional[float] = None  # <-- Yeh field bhi lazmi add karein
+
+
+class RefundRequest(BaseModel):
+    amount: float = Field(..., gt=0)
+    reason: str = Field(..., min_length=1)
 
 
 class Payment(BaseModel):

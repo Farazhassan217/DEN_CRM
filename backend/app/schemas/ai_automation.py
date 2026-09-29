@@ -173,3 +173,36 @@ class KnowledgeChunkResponse(KnowledgeChunkBase):
 
     id: UUID
     created_at: datetime
+
+
+# 9. Knowledge RAG Search Schemas
+class KnowledgeSearchRequest(BaseModel):
+    """
+    Request body for the RAG semantic search endpoint.
+    Frontend sends the user's natural language query here.
+    """
+    query: str                              # User ka sawal / search text
+    organization_id: UUID                   # Sirf is org ke chunks search ho
+    document_id: Optional[UUID] = None      # Optional: sirf ek document mein search karo
+    top_k: Optional[int] = Field(default=5, ge=1, le=20)  # Kitne results chahiye (1-20)
+
+
+class KnowledgeSearchResultItem(BaseModel):
+    """
+    Single search result — one relevant chunk with its similarity score.
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    chunk_id: UUID
+    document_id: UUID
+    content: str                            # The actual text chunk
+    similarity_score: float                 # 0.0 = most similar, 2.0 = least similar (cosine distance)
+
+
+class KnowledgeSearchResponse(BaseModel):
+    """
+    Full response from the RAG search endpoint.
+    """
+    query: str                              # Original query (for frontend reference)
+    results: List[KnowledgeSearchResultItem]
+    total_results: int

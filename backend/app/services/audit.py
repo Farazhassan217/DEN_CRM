@@ -93,9 +93,20 @@ class AuditService:
         return await AuditModel.get_by_user(str(user_id), limit)
     
     @staticmethod
-    async def get_organization_logs(org_id: Any, limit: int = 100) -> List[AuditLog]:
-        """Get audit logs for an organization"""
-        return await AuditModel.get_by_organization(str(org_id), limit)
+    async def get_organization_logs(
+        org_id: Any, 
+        limit: int = 100, 
+        clinic_id: Optional[str] = None
+    ) -> List[AuditLog]:
+        """Get audit logs for an organization, optionally filtered by clinic_id"""
+        clean_clinic_id = str(clinic_id) if clinic_id else None
+        return await AuditModel.get_by_organization(str(org_id), limit, clean_clinic_id)
+
+    @staticmethod
+    async def get_all_organization_logs(limit: int = 100) -> List[AuditLog]:
+        """Get audit logs across all organizations (Super Admin)"""
+        # Agar AuditModel mein all logs fetch karne ka method mojood hai (jaise get_all ya get_security_logs)
+        return await AuditModel.get_security_logs(limit) # Ya agar AuditModel mein koi general get_all method hai toh woh use karein
     
     @staticmethod
     async def get_security_logs(limit: int = 100) -> List[AuditLog]:

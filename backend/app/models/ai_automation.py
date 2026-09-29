@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector  # pgvector-python package
 
-from app.database import Base
+from ..database import Base
 
 
 class AIPromptVersion(Base):

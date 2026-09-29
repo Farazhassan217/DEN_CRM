@@ -78,17 +78,22 @@ A comprehensive CRM platform for dental clinics with role-based access control.
 # SlowAPI Limiter state
 app.state.limiter = limiter
 
-# Exception Handlers (Drawback 3 & Drawback 1)
+# Exception Handlers
 app.add_exception_handler(AppException, app_exception_handler)
 app.add_exception_handler(RateLimitExceeded, rate_limit_exception_handler)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
 
-# CORS Middleware (Drawback 8 — Explicit configured origins)
+# CORS Middleware (Explicit configured origins for Frontend Local & Network IP access)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174", 
+        "http://192.168.18.96:5173",
+        "http://192.168.18.96:5174",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -122,7 +127,7 @@ async def root():
 @app.get("/health")
 async def health_check():
     """
-    Comprehensive system health check monitoring Database, Redis, and AI configurations (Phase 4).
+    Comprehensive system health check monitoring Database, Redis, and AI configurations.
     """
     redis_connected = redis_client.ping()
     redis_status = "connected" if redis_connected else "degraded"

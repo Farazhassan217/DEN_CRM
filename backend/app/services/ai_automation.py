@@ -2,8 +2,9 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List, Optional
 from fastapi import HTTPException, status
+from pgvector.sqlalchemy import Vector
 
-from app.models.ai_automation import (
+from ..models.ai_automation import (
     AIPromptVersion,
     AIRun,
     AIFeedback,
@@ -13,7 +14,7 @@ from app.models.ai_automation import (
     KnowledgeDocument,
     KnowledgeChunk,
 )
-from app.schemas.ai_automation import (
+from ..schemas.ai_automation import (
     AIPromptVersionCreate,
     AIRunCreate,
     AIFeedbackCreate,
@@ -99,8 +100,72 @@ class AIAutomationService:
 
     @staticmethod
     def create_knowledge_chunk(db: Session, schema: KnowledgeChunkCreate) -> KnowledgeChunk:
+        """
+        Store a knowledge chunk in the database.
+        Embedding should be pre-generated and passed in schema.embedding.
+        The API layer (ai.py) handles auto-generation via OpenAIService.generate_embedding().
+        """
         db_obj = KnowledgeChunk(**schema.dict())
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
         return db_obj
+
+    @staticmethod
+    def search_similar_chunks(
+        db: Session,
+        query_embedding: List[float],
+        organization_id: UUID,
+        top_k: int = 5,
+        document_id: Optional[UUID] = None
+    ) -> List[KnowledgeChunk]:
+        """
+        RAG Retriever: Find the most semantically similar chunks
+        to a query embedding using pgvector cosine distance.
+
+        Lower cosine distance = more similar.
+        Filters by organization_id (data isolation between clinics).
+        Optionally filter by document_id to search within a specific document.
+
+        Args:
+            db: SQLAlchemy session
+            query_embedding: 1536-dim float list from OpenAIService.generate_embedding()
+            organization_id: Only search chunks belonging to this org
+            top_k: Number of top results to return (default 5)
+            document_id: Optional — restrict search to one document
+
+        Returns:
+            List of KnowledgeChunk objects ordered by similarity (most relevant first)
+        """
+        query = (
+            db.query(KnowledgeChunk)
+            .filter(
+                KnowledgeChunk.organization_id == organization_id,
+                KnowledgeChunk.embedding.isnot(None)  # Skip chunks with no embedding
+            )
+        )
+
+        if document_id:
+            query = query.filter(KnowledgeChunk.document_id == document_id)
+
+        # pgvector cosine_distance: 0 = identical, 2 = opposite
+        results = (
+            query
+            .order_by(KnowledgeChunk.embedding.cosine_distance(query_embedding))
+            .limit(top_k)
+            .all()
+        )
+        return results
+
+    @staticmethod
+    def get_chunks_by_document(db: Session, document_id: UUID) -> List[KnowledgeChunk]:
+        """
+        List all chunks belonging to a specific knowledge document.
+        Useful for frontend to show what chunks are stored under a document.
+        """
+        return (
+            db.query(KnowledgeChunk)
+            .filter(KnowledgeChunk.document_id == document_id)
+            .order_by(KnowledgeChunk.created_at.asc())
+            .all()
+        )

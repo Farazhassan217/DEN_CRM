@@ -1,11 +1,11 @@
 
+
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import Optional
 
-from ..schemas.user import User, Token, UserLogin, UserCreate, RefreshTokenRequest, GoogleAuthRequest
+from ..schemas.user import User, Token, UserLogin, RefreshTokenRequest, GoogleAuthRequest
 from ..models.user import UserModel
 from ..services.auth import AuthService, get_current_user, revoke_token, create_access_token, create_refresh_token
-from ..core.auth_utils import hash_password
 from ..core.rate_limiter import limiter
 from ..core.config import settings
 
@@ -14,125 +14,6 @@ router = APIRouter(
     prefix="/auth",
     tags=["Authentication"]
 )
-
-# Roles that are explicitly blocked from creating users via /auth/register
-_BLOCKED_REGISTER_ROLES = {"finance", "agent", "reception", "clinic_manager"}
-
-
-@router.post(
-    "/register",
-    response_model=User,
-    status_code=status.HTTP_201_CREATED
-)
-async def register(
-    user_data: UserCreate,
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Register a new user in the system.
-    Only Super Admin and Org Admin can register new users via this endpoint.
-    Finance, Agent, Reception, and Clinic Manager roles are blocked.
-    """
-
-    # ---------------------------------------------------------
-    # ROLE CHECK: Only super_admin and org_admin allowed
-    # ---------------------------------------------------------
-    current_role = (
-        current_user.role.value
-        if hasattr(current_user.role, "value")
-        else str(current_user.role)
-    ).lower()
-
-    if current_role in _BLOCKED_REGISTER_ROLES:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                f"Access denied. '{current_role}' role does not have permission "
-                "to register new users. Contact your Org Admin."
-            )
-        )
-
-    # Org Admin can only register users for their own organization
-    if current_role == "org_admin":
-        if user_data.organization_id and str(user_data.organization_id) != str(current_user.organization_id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only register users for your own organization."
-            )
-        # Force org_id to admin's org
-        user_data.organization_id = current_user.organization_id
-
-    # ---------------------------------------------------------
-    # 1. Check if email already exists
-    # ---------------------------------------------------------
-
-    existing_user = await UserModel.get_by_email(
-        user_data.email
-    )
-
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email address already registered."
-        )
-
-    # ---------------------------------------------------------
-    # 2. Hash password
-    # ---------------------------------------------------------
-
-    hashed_pwd = hash_password(
-        user_data.password
-    )
-
-    # ---------------------------------------------------------
-    # 3. Convert Pydantic model to dictionary
-    #
-    # Do not send ID because Supabase/PostgreSQL
-    # should generate the UUID automatically.
-    # ---------------------------------------------------------
-
-    user_dict = user_data.model_dump(
-        exclude={
-            "password",
-            "id"
-        },
-        exclude_unset=True
-    )
-
-    # ---------------------------------------------------------
-    # 4. Convert empty UUID values to None
-    #
-    # PostgreSQL UUID columns cannot accept "".
-    # They can accept a valid UUID or NULL.
-    # ---------------------------------------------------------
-
-    uuid_fields = [
-        "organization_id",
-        "clinic_id"
-    ]
-
-    for field in uuid_fields:
-
-        if field in user_dict:
-
-            if user_dict[field] == "":
-                user_dict[field] = None
-
-    # ---------------------------------------------------------
-    # 5. Add hashed password
-    # ---------------------------------------------------------
-
-    user_dict["password"] = hashed_pwd
-
-    # ---------------------------------------------------------
-    # 6. Create user in Supabase
-    # ---------------------------------------------------------
-
-    new_user = await UserModel.create(
-        user_dict
-    )
-
-    return new_user
 
 
 @router.post(
@@ -316,7 +197,7 @@ async def logout(
 )
 async def get_google_oauth_url():
     """
-    Get Google OAuth 2.0 authorization URL for SSO login (Concept #9).
+    Get Google OAuth 2.0 authorization URL for SSO login.
     """
     client_id = settings.GOOGLE_CLIENT_ID or ""
     redirect_uri = settings.GOOGLE_REDIRECT_URI or ""
@@ -340,7 +221,7 @@ async def google_oauth_login(
     payload: GoogleAuthRequest
 ):
     """
-    Authenticate user via Google OAuth 2.0 ID token / SSO (Concept #9).
+    Authenticate user via Google OAuth 2.0 ID token / SSO.
     Decodes Google ID token, verifies user in Dental CRM, and issues JWT tokens.
     """
     id_token_str = payload.id_token.strip()
@@ -403,5 +284,3 @@ async def google_oauth_login(
         refresh_token=refresh_token_str,
         user=user
     )
-
-

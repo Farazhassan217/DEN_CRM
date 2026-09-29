@@ -1,21 +1,55 @@
-# Environment variables & secrets
+# ========================================
+# Secrets & Environment Variables
+# ========================================
 .env
 backend/.env
+*.env.local
 
+# ========================================
 # Python Cache & Virtual Environments
+# ========================================
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 .venv/
 venv/
+backend/venv/
+.pytest_cache/
+backend/.pytest_cache/
 
-# Next.js / Frontend Build files
+# ========================================
+# Build & Compiled Artifacts
+# ========================================
+*.zip
+*.tar.gz
+dist/
+build/
+*.egg-info/
+
+# ========================================
+# Frontend Build Files (Next.js / React)
+# ========================================
 .next/
 out/
-build/
+node_modules/
 next-env.d.ts
 
-# OS specific files
+# ========================================
+# Database & Alembic
+# ========================================
+*.db
+*.sqlite
+
+# ========================================
+# OS Specific
+# ========================================
 .DS_Store
 Thumbs.db
 ~$*
+
+# ========================================
+# Logs & Reports (Generated)
+# ========================================
+*.log
+backend/CHANGE_REPORT.pdf

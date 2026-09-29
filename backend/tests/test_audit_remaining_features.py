@@ -155,7 +155,7 @@ def test_delete_lead_status_204(client, superadmin_headers, monkeypatch):
     headers, user_id, org_id = superadmin_headers
 
     from app.models.user import UserModel
-    from app.services.lead import LeadService
+    from app.services.lead import LeadService, delete_lead
 
     dummy_admin = User(
         id=uuid.UUID(user_id),
@@ -169,7 +169,7 @@ def test_delete_lead_status_204(client, superadmin_headers, monkeypatch):
         assigned_clinics=["clinic_main"]
     )
     monkeypatch.setattr(UserModel, "get_by_id", AsyncMock(return_value=dummy_admin))
-    monkeypatch.setattr(LeadService, "delete_lead", AsyncMock(return_value=True))
+    monkeypatch.setattr("app.services.lead.delete_lead", AsyncMock(return_value=True))
 
     lead_id = str(uuid.uuid4())
     response = client.delete(f"/api/v1/leads/{lead_id}", headers=headers)

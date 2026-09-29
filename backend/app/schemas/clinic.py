@@ -7,7 +7,7 @@ class ClinicBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=200)
     description: Optional[str] = None
     contact_email: str
-    contact_phone: Optional[str] = None
+    contact_phone: Optional[str] = Field(None, min_length=7, max_length=20, pattern=r'^\+?[0-9\-\(\)\s]{7,20}$')
     address: Optional[str] = None
     timezone: str = "UTC"
     working_hours: Optional[dict] = None  # {monday: {open: "09:00", close: "17:00"}, ...}
@@ -21,7 +21,7 @@ class ClinicUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     contact_email: Optional[str] = None
-    contact_phone: Optional[str] = None
+    contact_phone: Optional[str] = Field(None, min_length=7, max_length=20, pattern=r'^\+?[0-9\-\(\)\s]{7,20}$')
     address: Optional[str] = None
     timezone: Optional[str] = None
     working_hours: Optional[dict] = None

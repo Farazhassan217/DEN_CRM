@@ -13,7 +13,9 @@ if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
 # 2. Correct imports based on your structure
+# pyrefly: ignore [missing-import]
 from app.database import Base
+# pyrefly: ignore [missing-import]
 from app.models.ai_automation import *  # AI models import
 
 config = context.config

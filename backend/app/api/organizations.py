@@ -5,6 +5,9 @@ from ..schemas.user import User
 from ..services.organization import OrganizationService
 from ..services.auth import get_current_user
 
+# Reuse role normalization helper from users module
+from .users import get_role_value
+
 router = APIRouter(prefix="/organizations", tags=["Organizations"])
 
 
@@ -19,11 +22,27 @@ async def get_organizations(
     - Super Admin: All organizations
     - Org Admin: Their own organization
     """
-    if current_user.role.value == "super_admin":
+    role_str = get_role_value(current_user.role)
+
+    if role_str == "super_admin":
+        # Super Admin: can view all organizations
         return await OrganizationService.get_all_organizations(current_user, limit, offset)
-    else:
+
+    # Org Admin, Clinic Manager, Agent: can view their own organization
+    if role_str in ["org_admin", "clinic_manager", "agent"]:
+        if not current_user.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User does not belong to any organization."
+            )
         org = await OrganizationService.get_organization(current_user.organization_id, current_user)
         return [org]
+
+    # Other roles are not allowed to list organizations
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Insufficient permissions to view organizations."
+    )
 
 
 @router.get("/{org_id}", response_model=Organization)

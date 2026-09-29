@@ -20,7 +20,7 @@ class OrganizationUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     contact_email: Optional[str] = None
-    contact_phone: Optional[str] = None
+    contact_phone: Optional[str] = Field(None, min_length=7, max_length=20, pattern=r'^\+?[0-9\-\(\)\s]{7,20}$')
     address: Optional[str] = None
     branding: Optional[dict] = None
     is_active: Optional[bool] = None

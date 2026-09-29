@@ -14,9 +14,12 @@ class LeadModel:
         """Create a new lead"""
         supabase = get_admin_client()
         data = lead_data.model_dump(exclude_unset=True)
-        query = supabase.table(LeadModel.TABLE_NAME).insert(data)
+        # Added .select() to ensure return data array
+        query = supabase.table(LeadModel.TABLE_NAME).insert(data).select()
         response = await execute_query(query)
-        return Lead(**response.data[0])
+        if response.data:
+            return Lead(**response.data[0])
+        raise ValueError("Failed to create lead in database.")
     
     @staticmethod
     async def get_by_id(lead_id: str, include_deleted: bool = False) -> Optional[Lead]:
@@ -36,7 +39,8 @@ class LeadModel:
         """Update lead"""
         supabase = get_admin_client()
         data = lead_data.model_dump(exclude_unset=True)
-        query = supabase.table(LeadModel.TABLE_NAME).update(data).eq("id", lead_id)
+        # Added .select() to return updated row payload
+        query = supabase.table(LeadModel.TABLE_NAME).update(data).eq("id", lead_id).select()
         response = await execute_query(query)
         if response.data:
             return Lead(**response.data[0])
@@ -46,9 +50,9 @@ class LeadModel:
     async def delete(lead_id: str) -> bool:
         """Soft delete lead"""
         supabase = get_admin_client()
-        query = supabase.table(LeadModel.TABLE_NAME).update({"is_deleted": True}).eq("id", lead_id)
+        query = supabase.table(LeadModel.TABLE_NAME).update({"is_deleted": True}).eq("id", lead_id).select()
         response = await execute_query(query)
-        return len(response.data) > 0
+        return len(response.data) > 0 if response.data else False
     
     @staticmethod
     async def get_by_clinic(
@@ -68,7 +72,7 @@ class LeadModel:
             .range(offset, offset + limit - 1)
         )
         response = await execute_query(query)
-        leads = [Lead(**lead) for lead in response.data]
+        leads = [Lead(**lead) for lead in response.data] if response.data else []
         if return_count:
             total = response.count if response.count is not None else len(leads)
             return leads, total
@@ -92,7 +96,7 @@ class LeadModel:
             .range(offset, offset + limit - 1)
         )
         response = await execute_query(query)
-        leads = [Lead(**lead) for lead in response.data]
+        leads = [Lead(**lead) for lead in response.data] if response.data else []
         if return_count:
             total = response.count if response.count is not None else len(leads)
             return leads, total
@@ -116,7 +120,7 @@ class LeadModel:
             .range(offset, offset + limit - 1)
         )
         response = await execute_query(query)
-        leads = [Lead(**lead) for lead in response.data]
+        leads = [Lead(**lead) for lead in response.data] if response.data else []
         if return_count:
             total = response.count if response.count is not None else len(leads)
             return leads, total
@@ -136,7 +140,7 @@ class LeadModel:
             query = query.eq("clinic_id", clinic_id)
         
         response = await execute_query(query)
-        return [Lead(**lead) for lead in response.data]
+        return [Lead(**lead) for lead in response.data] if response.data else []
     
     @staticmethod
     async def count_by_clinic(clinic_id: str) -> int:
@@ -149,7 +153,7 @@ class LeadModel:
             .eq("is_deleted", False)
         )
         response = await execute_query(query)
-        return response.count if response.count else 0
+        return response.count if response.count is not None else 0
     
     @staticmethod
     async def search(query_text: str, clinic_id: Optional[str] = None) -> List[Lead]:
@@ -165,4 +169,4 @@ class LeadModel:
             search_query = search_query.eq("clinic_id", clinic_id)
         
         response = await execute_query(search_query)
-        return [Lead(**lead) for lead in response.data]
+        return [Lead(**lead) for lead in response.data] if response.data else []

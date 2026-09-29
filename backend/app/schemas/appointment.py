@@ -35,7 +35,7 @@ class AppointmentBase(BaseModel):
     status: AppointmentStatus = AppointmentStatus.SCHEDULED
     patient_name: str
     patient_email: Optional[EmailStr] = None
-    patient_phone: str
+    patient_phone: str = Field(..., min_length=7, max_length=20, pattern=r'^\+?[0-9\-\(\)\s]{7,20}$')
     reminder_sent: bool = False
 
 
@@ -55,7 +55,7 @@ class AppointmentUpdate(BaseModel):
     status: Optional[AppointmentStatus] = None
     patient_name: Optional[str] = None
     patient_email: Optional[EmailStr] = None
-    patient_phone: Optional[str] = None
+    patient_phone: Optional[str] = Field(None, min_length=7, max_length=20, pattern=r'^\+?[0-9\-\(\)\s]{7,20}$')
     reminder_sent: Optional[bool] = None
     assigned_to: Optional[str] = None
 

@@ -64,6 +64,13 @@ class LeadService:
         if hasattr(lead_data, "assigned_to") and lead_data.assigned_to == "":
             lead_data.assigned_to = None
         
+        # Convert UUID fields to strings for JSON serialization
+        from uuid import UUID
+        for field_name in ["assigned_to", "clinic_id", "organization_id"]:
+            if hasattr(lead_data, field_name):
+                value = getattr(lead_data, field_name)
+                if isinstance(value, UUID):
+                    setattr(lead_data, field_name, str(value))
         lead = await LeadModel.create(lead_data)
         
         # Log audit
@@ -275,42 +282,57 @@ class LeadService:
         
         return await LeadModel.get_by_organization(org_id, limit, offset, return_count=return_count)
 
-    @staticmethod
-    async def delete_lead(lead_id: str, current_user: User) -> bool:
-        """Soft delete lead with tenant authorization checks and audit logging"""
-        lead = await LeadModel.get_by_id(lead_id)
-        if not lead:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lead not found"
-            )
-        
-        user_role_str = get_role_str(current_user.role)
-        if user_role_str not in ["super_admin", "org_admin"]:
+
+async def delete_lead(lead_id: str, current_user: User) -> bool:
+    """Soft delete lead with tenant authorization checks and audit logging"""
+    lead = await LeadModel.get_by_id(lead_id)
+    if not lead:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lead not found"
+        )
+    
+    user_role_str = get_role_str(current_user.role)
+    
+    # Super Admin can delete any lead
+    if user_role_str == "super_admin":
+        pass  # proceed to delete
+    
+    # Org Admin can only delete leads in their organization
+    elif user_role_str == "org_admin":
+        if str(lead.organization_id) != str(current_user.organization_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not enough permissions to delete lead"
+                detail="Cannot delete lead from another organization"
             )
-        
-        if user_role_str == "org_admin":
-            if str(lead.organization_id) != str(current_user.organization_id):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Cannot delete lead from another organization"
-                )
-
-        result = await LeadModel.delete(lead_id)
-        
-        user_role_val = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-        await AuditService.log_action(
-            action="lead.delete",
-            entity_type="lead",
-            entity_id=lead_id,
-            user_id=current_user.id,
-            user_email=current_user.email,
-            user_role=user_role_val,
-            description=f"Soft deleted lead: {lead.first_name} {lead.last_name}",
-            organization_id=lead.organization_id,
-            clinic_id=lead.clinic_id
+    
+    # Clinic Manager / Reception can only delete leads in their assigned clinics
+    elif user_role_str in ["clinic_manager", "reception"]:
+        if lead.clinic_id not in (current_user.assigned_clinics or []):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Can only delete leads from your assigned clinics"
+            )
+    
+    # Agent and other roles cannot delete leads
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions to delete lead"
         )
-        return result
+    
+    result = await LeadModel.delete(lead_id)
+    
+    user_role_val = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    await AuditService.log_action(
+        action="lead.delete",
+        entity_type="lead",
+        entity_id=lead_id,
+        user_id=current_user.id,
+        user_email=current_user.email,
+        user_role=user_role_val,
+        description=f"Soft deleted lead: {lead.first_name} {lead.last_name}",
+        organization_id=lead.organization_id,
+        clinic_id=lead.clinic_id
+    )
+    return result

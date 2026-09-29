@@ -1,5 +1,6 @@
 import logging
-from openai import AsyncOpenAI, APIError, RateLimitError, APITimeoutError
+from typing import List
+from openai import AsyncOpenAI, APIError, RateLimitError, APITimeoutError, InternalServerError, APIConnectionError
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from ..core.config import settings
 
@@ -12,12 +13,15 @@ client = AsyncOpenAI(
     timeout=float(settings.AI_TIMEOUT_SECONDS)
 )
 
+# Embedding model - 1536 dimensions, compatible with pgvector Vector(1536) column
+EMBEDDING_MODEL = "text-embedding-004"
+
 
 @retry(
     reraise=True,
     stop=stop_after_attempt(settings.AI_MAX_RETRIES),
     wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception_type((RateLimitError, APITimeoutError))
+    retry=retry_if_exception_type((RateLimitError, APITimeoutError, InternalServerError, APIConnectionError))
 )
 async def _call_model_with_retry(model_name: str, messages: list[dict]) -> str:
     response = await client.chat.completions.create(
@@ -25,6 +29,24 @@ async def _call_model_with_retry(model_name: str, messages: list[dict]) -> str:
         messages=messages
     )
     return response.choices[0].message.content
+
+
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(settings.AI_MAX_RETRIES),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type((RateLimitError, APITimeoutError, InternalServerError, APIConnectionError))
+)
+async def _generate_embedding_with_retry(text: str) -> List[float]:
+    """
+    Internal helper: calls Gemini's embedding endpoint with retry logic.
+    Returns a list of floats (vector) for the given text.
+    """
+    response = await client.embeddings.create(
+        model=EMBEDDING_MODEL,
+        input=text
+    )
+    return response.data[0].embedding
 
 
 class OpenAIService:
@@ -56,3 +78,22 @@ class OpenAIService:
         except Exception as fallback_error:
             logger.error("Fallback AI model '%s' also failed: %s", settings.AI_FALLBACK_MODEL, fallback_error)
             raise fallback_error
+
+    @staticmethod
+    async def generate_embedding(text: str) -> List[float]:
+        """
+        Generate a vector embedding for the given text using Gemini's embedding model.
+        Returns a list of 1536 floats, compatible with the KnowledgeChunk.embedding
+        pgvector column (Vector(1536)).
+
+        Used in two places:
+        1. When storing a KnowledgeChunk — auto-embed the content server-side.
+        2. When searching — embed the user's query before cosine similarity search.
+        """
+        try:
+            embedding = await _generate_embedding_with_retry(text)
+            logger.info("Embedding generated successfully. Dimensions: %d", len(embedding))
+            return embedding
+        except Exception as e:
+            logger.error("Embedding generation failed: %s", e)
+            raise e

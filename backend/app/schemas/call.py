@@ -35,7 +35,7 @@ class CallCreate(CallBase):
 
 
 class CallLog(BaseModel):
-    phone_number: str
+    phone_number: str = Field(..., min_length=7, max_length=20, pattern=r'^\+?[0-9\-\(\)\s]{7,20}$')
     call_type: CallType
     timestamp: datetime
     duration_seconds: Optional[int] = None

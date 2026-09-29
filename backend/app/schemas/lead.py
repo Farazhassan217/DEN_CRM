@@ -30,28 +30,30 @@ class LeadSource(str, Enum):
 
 class LeadBase(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100)
-    last_name: str = Field(..., min_length=1, max_length=100)
+    last_name: Optional[str] = Field(None, max_length=100)
     email: Optional[EmailStr] = None
-    phone: str = Field(..., min_length=7, max_length=20)
-    source: LeadSource = LeadSource.OTHER
-    status: LeadStatus = LeadStatus.NEW
+    phone: Optional[str] = Field(None, max_length=20)
+    source: Optional[LeadSource] = LeadSource.OTHER
+    status: Optional[LeadStatus] = LeadStatus.NEW
     notes: Optional[str] = None
     treatment_interest: Optional[str] = None
     expected_revenue: Optional[float] = None
     assigned_to: Optional[str] = None  # User ID
-    priority: str = "medium"  # low, medium, high, urgent
+    
+    # FIX 1: priority ko Optional[str] banaya taake DB ka NULL gracefully handle ho
+    priority: Optional[str] = "medium"  # low, medium, high, urgent
 
 
 class LeadCreate(LeadBase):
-    clinic_id: str
-    organization_id: str
+    clinic_id: Optional[str] = None
+    organization_id: Optional[str] = None
 
 
 class LeadUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[EmailStr] = None
-    phone: Optional[str] = None
+    phone: Optional[str] = Field(None, max_length=20)
     source: Optional[LeadSource] = None
     status: Optional[LeadStatus] = None
     notes: Optional[str] = None
@@ -64,15 +66,16 @@ class LeadUpdate(BaseModel):
 
 class Lead(LeadBase):
     id: str
-    clinic_id: str
-    organization_id: str
+    # FIX 2: clinic_id aur organization_id ko optional banaya response safety ke liye
+    clinic_id: Optional[str] = None
+    organization_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     converted_at: Optional[datetime] = None
     lost_reason: Optional[str] = None
     last_contacted_at: Optional[datetime] = None
-    appointment_count: int = 0
-    call_count: int = 0
-    note_count: int = 0
+    appointment_count: Optional[int] = 0
+    call_count: Optional[int] = 0
+    note_count: Optional[int] = 0
     
     model_config = ConfigDict(from_attributes=True)

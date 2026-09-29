@@ -26,7 +26,12 @@ class UserBase(BaseModel):
         max_length=255
     )
 
-    phone: Optional[str] = None
+    phone: Optional[str] = Field(
+        None,
+        min_length=0,
+        max_length=20,
+        pattern=r'^(\+?[0-9\-\(\)\s]{7,20})?$'
+    )
 
     role: UserRole
 
@@ -61,7 +66,12 @@ class UserUpdate(BaseModel):
         max_length=255
     )
 
-    phone: Optional[str] = None
+    phone: Optional[str] = Field(
+        None,
+        min_length=0,
+        max_length=20,
+        pattern=r'^(\+?[0-9\-\(\)\s]{7,20})?$'
+    )
 
     role: Optional[UserRole] = None
 
@@ -162,4 +172,3 @@ class TokenData(BaseModel):
     assigned_clinics: Optional[List[str]] = None
     jti: Optional[str] = None
     token_type: Optional[str] = "access"
-

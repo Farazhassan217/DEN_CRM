@@ -1,6 +1,11 @@
+# Purana import kuch aisa hoga:
+# from fastapi import APIRouter, Depends, HTTPException, status
+
+# Isko update kar ke Body bhi shamil kar dein:
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Header
 from typing import List, Optional
-from ..schemas.revenue import Revenue, RevenueCreate, RevenueUpdate, PaymentStatus, PaymentType
+from ..schemas.revenue import Revenue, RevenueCreate, RevenueUpdate, PaymentStatus, PaymentType, RefundRequest
 from ..schemas.user import User
 from ..schemas.pagination import PaginatedResponse
 from ..services.revenue import RevenueService
@@ -232,13 +237,12 @@ async def process_payment(
 async def process_refund(
     request: Request,
     revenue_id: str,
-    amount: float = Query(..., gt=0),
-    reason: str = Query(...),
+    refund_data: RefundRequest = Body(...),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_user)
 ):
     async def _action():
-        res = await RevenueService.process_refund(revenue_id, amount, current_user, reason)
+        res = await RevenueService.process_refund(revenue_id, refund_data.amount, current_user, refund_data.reason)
         clinic_id = getattr(res, "clinic_id", None) if not isinstance(res, dict) else res.get("clinic_id")
         if clinic_id:
             CacheManager.invalidate("revenue_totals", str(clinic_id))

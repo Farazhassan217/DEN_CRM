@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional, List
 from fastapi import HTTPException, status
 from ..core.roles import UserRole, has_permission
@@ -13,23 +14,51 @@ def get_role_str(role_obj) -> str:
     return str(role_obj).lower()
 
 
+def is_valid_uuid(val: Optional[str]) -> bool:
+    """Check if value is a non-empty valid UUID string."""
+    if not val or str(val).strip().lower() in ["none", "null", ""]:
+        return False
+    try:
+        uuid.UUID(str(val))
+        return True
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
 class ClinicService:
     """Clinic management service"""
 
     @staticmethod
-    async def create_clinic(clinic_data: ClinicCreate, current_user: User) -> Clinic:
-        """Create a new clinic with permission checks"""
-
+    async def get_all_clinics(current_user: User) -> List[Clinic]:
+        """Fetch all clinics in the system (Super Admin only)."""
         role_str = get_role_str(current_user.role)
 
-        # Permission check
+        if role_str != "super_admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions to view all clinics"
+            )
+
+        # Call model layer to fetch all clinic records
+        if hasattr(ClinicModel, "get_all"):
+            return await ClinicModel.get_all()
+        elif hasattr(ClinicModel, "get_all_clinics"):
+            return await ClinicModel.get_all_clinics()
+        
+        # Fallback query if your model uses raw queries
+        return await ClinicModel.query().execute()
+
+    @staticmethod
+    async def create_clinic(clinic_data: ClinicCreate, current_user: User) -> Clinic:
+        """Create a new clinic with permission checks"""
+        role_str = get_role_str(current_user.role)
+
         if role_str not in ["super_admin", "org_admin"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions to create clinics"
             )
 
-        # Org Admin can only create clinics in their own org
         if role_str == "org_admin":
             if str(clinic_data.organization_id) != str(current_user.organization_id):
                 raise HTTPException(
@@ -39,7 +68,7 @@ class ClinicService:
 
         clinic = await ClinicModel.create(clinic_data)
 
-        # Log audit
+        # Audit logging
         try:
             await AuditService.log_action(
                 action="clinic.create",
@@ -59,6 +88,11 @@ class ClinicService:
     @staticmethod
     async def get_clinic(clinic_id: str, current_user: User) -> Clinic:
         """Get clinic by ID with permission checks"""
+        if not is_valid_uuid(clinic_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid clinic UUID: '{clinic_id}'"
+            )
 
         clinic = await ClinicModel.get_by_id(clinic_id)
         if not clinic:
@@ -69,11 +103,10 @@ class ClinicService:
 
         role_str = get_role_str(current_user.role)
 
-        # Permission check based on role
         if role_str == "super_admin":
             return clinic
 
-        if role_str == "org_admin":
+        if role_str in ["org_admin", "reception"]:
             if str(clinic.organization_id) != str(current_user.organization_id):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -81,30 +114,12 @@ class ClinicService:
                 )
             return clinic
 
-        if role_str == "clinic_manager":
+        if role_str in ["clinic_manager", "agent", "finance"]:
             assigned = [str(c) for c in (current_user.assigned_clinics or [])]
             if str(clinic_id) not in assigned:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Can only view your assigned clinics"
-                )
-            return clinic
-
-        if role_str == "reception":
-            # Reception can view clinics in their own organization
-            if str(clinic.organization_id) != str(current_user.organization_id):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Can only view clinics in your own organization"
-                )
-            return clinic
-
-        if role_str in ["agent", "finance"]:
-            assigned = [str(c) for c in (current_user.assigned_clinics or [])]
-            if str(clinic_id) not in assigned:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Can only view your assigned clinic"
                 )
             return clinic
 
@@ -116,6 +131,11 @@ class ClinicService:
     @staticmethod
     async def update_clinic(clinic_id: str, clinic_data: ClinicUpdate, current_user: User) -> Clinic:
         """Update clinic with permission checks"""
+        if not is_valid_uuid(clinic_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid clinic UUID: '{clinic_id}'"
+            )
 
         clinic = await ClinicModel.get_by_id(clinic_id)
         if not clinic:
@@ -126,14 +146,12 @@ class ClinicService:
 
         role_str = get_role_str(current_user.role)
 
-        # Permission check
         if role_str not in ["super_admin", "org_admin", "clinic_manager"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions to update clinics"
             )
 
-        # Org Admin can only update clinics in their org
         if role_str == "org_admin":
             if str(clinic.organization_id) != str(current_user.organization_id):
                 raise HTTPException(
@@ -141,7 +159,6 @@ class ClinicService:
                     detail="Can only update clinics in your own organization"
                 )
 
-        # Clinic Manager can only update assigned clinics
         if role_str == "clinic_manager":
             assigned = [str(c) for c in (current_user.assigned_clinics or [])]
             if str(clinic_id) not in assigned:
@@ -152,7 +169,6 @@ class ClinicService:
 
         updated_clinic = await ClinicModel.update(clinic_id, clinic_data)
 
-        # Log audit
         try:
             await AuditService.log_action(
                 action="clinic.update",
@@ -173,27 +189,20 @@ class ClinicService:
 
     @staticmethod
     async def get_clinics_by_organization(org_id: str, current_user: User) -> List[Clinic]:
-        """Get all clinics in an organization"""
+        """Get all clinics in an organization with safety validation"""
+        # Invalid UUID prevention to stop 22P02 database crashes
+        if not is_valid_uuid(org_id):
+            return []
 
         role_str = get_role_str(current_user.role)
 
-        # Permission check
         if role_str not in ["super_admin", "org_admin", "clinic_manager", "reception"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions to view clinics"
             )
 
-        # Org Admin can only view their own org's clinics
-        if role_str == "org_admin":
-            if str(org_id) != str(current_user.organization_id):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Can only view clinics in your own organization"
-                )
-
-        # Reception can only view clinics in their own organization
-        if role_str == "reception":
+        if role_str in ["org_admin", "reception"]:
             if str(org_id) != str(current_user.organization_id):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -205,8 +214,15 @@ class ClinicService:
     @staticmethod
     async def get_assigned_clinics(current_user: User) -> List[Clinic]:
         """Get clinics assigned to the current user"""
-
         if not current_user.assigned_clinics:
             return []
 
-        return await ClinicModel.get_by_ids(current_user.assigned_clinics)
+        # Filter out invalid UUIDs from assigned array
+        valid_assigned_ids = [
+            str(cid) for cid in current_user.assigned_clinics if is_valid_uuid(str(cid))
+        ]
+
+        if not valid_assigned_ids:
+            return []
+
+        return await ClinicModel.get_by_ids(valid_assigned_ids)

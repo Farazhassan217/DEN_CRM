@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from uuid import UUID
 from sqlalchemy.orm import Session
+import math
 
 from ..services.openai_service import OpenAIService
 from ..services.auth import get_current_user
@@ -21,6 +22,9 @@ from ..schemas.ai_automation import (
     AutomationRunCreate,
     KnowledgeDocumentCreate,
     KnowledgeChunkCreate,
+    KnowledgeSearchRequest,
+    KnowledgeSearchResponse,
+    KnowledgeSearchResultItem,
 )
 
 router = APIRouter(prefix="/ai", tags=["AI Features"])
@@ -267,9 +271,113 @@ async def create_knowledge_chunk(
     db: Session = Depends(get_db)
 ):
     """
-    Store text chunks along with their pgvector embeddings for RAG search.
+    Store a knowledge text chunk for RAG.
+
+    How it works:
+    - If 'embedding' field is NOT provided in the request body, the server
+      automatically generates it using OpenAIService.generate_embedding().
+    - If 'embedding' IS provided, it is stored as-is (useful for batch imports).
+
+    Frontend Developer Note:
+    You do NOT need to send embeddings. Just send 'content' and the server handles the rest.
     """
     try:
+        # Auto-generate embedding server-side if not provided by client
+        if not schema.embedding:
+            schema.embedding = await OpenAIService.generate_embedding(schema.content)
+
         return AIAutomationService.create_knowledge_chunk(db=db, schema=schema)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=f"Failed to create chunk: {str(e)}")
+
+
+@router.get("/knowledge/chunks/{document_id}")
+async def list_chunks_by_document(
+    document_id: UUID,
+    current_user: User = Depends(require_role(MANAGEMENT_ROLES)),
+    db: Session = Depends(get_db)
+):
+    """
+    List all text chunks stored under a specific knowledge document.
+
+    Frontend Developer Note:
+    Call this to show what content is indexed under a document.
+    GET /ai/knowledge/chunks/{document_id}
+    """
+    return AIAutomationService.get_chunks_by_document(db=db, document_id=document_id)
+
+
+@router.post("/knowledge/search", response_model=KnowledgeSearchResponse)
+async def search_knowledge_base(
+    request: Request,
+    payload: KnowledgeSearchRequest,
+    current_user: User = Depends(get_current_user),  # Any logged-in user can search
+    db: Session = Depends(get_db)
+):
+    """
+    RAG Semantic Search — The core retriever endpoint.
+
+    Full pipeline:
+    1. User sends a natural language query (e.g., 'What are payment policies?')
+    2. Server generates an embedding for the query via OpenAI/Gemini
+    3. pgvector finds the top-K most similar chunks using cosine distance
+    4. Results are returned ranked by relevance (lowest distance = most relevant)
+
+    Frontend Developer Note:
+    - POST /ai/knowledge/search
+    - Body: { query, organization_id, top_k (optional, default 5), document_id (optional) }
+    - Returns: { query, results: [{chunk_id, document_id, content, similarity_score}], total_results }
+    - Use 'content' from each result to build context for your AI chat component.
+    - Lower similarity_score = more relevant (0.0 is perfect match).
+    """
+    try:
+        # Step 1: Embed the user's query
+        query_embedding = await OpenAIService.generate_embedding(payload.query)
+
+        # Step 2: Run cosine similarity search via pgvector
+        chunks = AIAutomationService.search_similar_chunks(
+            db=db,
+            query_embedding=query_embedding,
+            organization_id=payload.organization_id,
+            top_k=payload.top_k,
+            document_id=payload.document_id
+        )
+
+        # Step 3: Build response with similarity scores
+        # Note: pgvector doesn't return the distance in the ORM result directly,
+        # so we re-compute cosine similarity for the response
+
+       
+
+        results = []
+        for chunk in chunks:
+            similarity_score = 1.0
+            if chunk.embedding is not None:
+                # Cosine distance = 1 - (A·B / (||A|| * ||B||))
+                c_emb = chunk.embedding
+                dot = sum(q * c for q, c in zip(query_embedding, c_emb))
+                norm_q = math.sqrt(sum(q * q for q in query_embedding))
+                norm_c = math.sqrt(sum(c * c for c in c_emb))
+                denom = norm_q * norm_c
+                if denom > 0:
+                    similarity_score = round(max(0.0, 1.0 - (dot / denom)), 4)
+
+
+            results.append(KnowledgeSearchResultItem(
+                chunk_id=chunk.id,
+                document_id=chunk.document_id,
+                content=chunk.content,
+                similarity_score=similarity_score
+            ))
+
+        return KnowledgeSearchResponse(
+            query=payload.query,
+            results=results,
+            total_results=len(results)
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"RAG search failed: {str(e)}"
+        )

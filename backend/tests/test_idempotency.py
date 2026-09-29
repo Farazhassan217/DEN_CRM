@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock
 from fastapi import Request
-from app.core.idempotency import execute_idempotent, check_idempotency
+from app.core.idempotency import execute_idempotent
 
 @pytest.mark.asyncio
 async def test_idempotency_execution_and_replay():

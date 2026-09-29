@@ -37,7 +37,7 @@ async def get_dashboard(
         start_date=start_date,
         end_date=end_date,
         clinic_ids=clinic_ids.split(",") if clinic_ids else None,
-        organization_id=current_user.organization_id
+        organization_id=str(current_user.organization_id) if current_user.organization_id else None
     )
     result = await ReportService.get_dashboard_data(current_user, filter)
     serializable = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
@@ -64,7 +64,7 @@ async def get_lead_report(
         start_date=start_date,
         end_date=end_date,
         clinic_ids=clinic_ids.split(",") if clinic_ids else None,
-        organization_id=current_user.organization_id
+        organization_id=str(current_user.organization_id) if current_user.organization_id else None
     )
     result = await ReportService.get_lead_report(filter, current_user)
     serializable = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
@@ -91,7 +91,7 @@ async def get_revenue_report(
         start_date=start_date,
         end_date=end_date,
         clinic_ids=clinic_ids.split(",") if clinic_ids else None,
-        organization_id=current_user.organization_id
+        organization_id=str(current_user.organization_id) if current_user.organization_id else None
     )
     result = await ReportService.get_revenue_report(filter, current_user)
     serializable = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
@@ -118,7 +118,7 @@ async def get_appointment_report(
         start_date=start_date,
         end_date=end_date,
         clinic_ids=clinic_ids.split(",") if clinic_ids else None,
-        organization_id=current_user.organization_id
+        organization_id=str(current_user.organization_id) if current_user.organization_id else None
     )
     result = await ReportService.get_appointment_report(filter, current_user)
     serializable = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
