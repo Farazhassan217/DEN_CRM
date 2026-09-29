@@ -62,6 +62,7 @@ supabase==2.31.0
 supabase-auth==2.31.0
 supabase-functions==2.31.0
 supafunc>=0.4.0
+slowapi==0.1.9
 tenacity==9.1.4
 tqdm==4.70.0
 typing-inspection==0.4.2
